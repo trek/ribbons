@@ -1,6 +1,5 @@
 require File.dirname(__FILE__) + '/spec_helper'
 
-
 describe "key value coding" do
   class KVCObject
     attr_accessor :some_attr
@@ -20,17 +19,21 @@ describe "key value coding" do
     @object.value_for_key('some_attr').should eql('some new value')
   end
   
-  it "should notifiy obserers of value change before and after" do
+  it "should access notifcations through did/will_change_value interface" do
     @object.should_receive(:will_change_value_for_key).with('some_attr')
     @object.should_receive(:did_change_value_for_key).with('some_attr')
-    # @object.should_receive(:send_notifications_for_key_change_options_is_before).exactly(2).times
-    
+    @object.set_value_for_key('some_attr', 'some new value')
+  end
+  
+  it "should notifiy obserers of value change before and after" do
+    @object.should_receive(:send_notifications_for_key_change_options_is_before).exactly(2).times
     @object.set_value_for_key('some_attr', 'some new value')
   end
 end
 
 describe "key value observation" do
   class ObservedObject
+    has_n :observed_things
     attr_accessor :observed_attribute
   end
   
@@ -40,35 +43,58 @@ describe "key value observation" do
     end
   end
   
-  describe "from the observed object's point of view" do
-    before do
-      @observer = ObservingObject.new
-      @observed = ObservedObject.new
-    
-      @observed.add_observer_for_key_path_options_context(@observer, 'observed_attribute', nil, nil)
-    end
+  before do
+    @observer = ObservingObject.new
+    @observed = ObservedObject.new
+
+    @observed.add_observer_for_key_path_options_context(@observer, 'observed_attribute', nil, nil)
+  end
   
-    it "should have the observing object listsed in its obsevers for the key" do
-      @observed.observers_for_key['observed_attribute'].should have(1).items
-      @observed.observers_for_key['observed_attribute'].keys.should include(@observer)
+  describe "for has-one relationships and attribute values" do
+    describe "from the observed object's point of view" do
+      it "should have the observing object listsed in its obsevers for the key" do
+        @observed.observers_for_key['observed_attribute'].should have(1).items
+        @observed.observers_for_key['observed_attribute'].keys.should include(@observer)
+      end
+
+      it "should not raise errors when observed value is updated" do
+        lambda { @observed.set_value_for_key('observed_attribute', 'something else') }.should_not raise_error
+      end
     end
-    
-    it "should not raise errors when observed value is updated" do
-      lambda { @observed.set_value_for_key('observed_attribute', 'something else') }.should_not raise_error
+
+    describe "from the observing object's point of view" do
+      it "should have observe_value_for_key_path_of_object_changes_context called" do
+        @observer.should_receive(:observe_value_for_key_path_of_object_changes_context)
+        @observed.set_value_for_key('observed_attribute', 'something else')
+      end
     end
   end
   
-  describe "from the observing object's point of view" do
-    before do
-      @observer = ObservingObject.new
-      @observed = ObservedObject.new
-    
-      @observed.add_observer_for_key_path_options_context(@observer, 'observed_attribute', nil, nil)
-    end
-    
-    it "should have observe_value_for_key_path_of_object_changes_context called" do
-      @observer.should_receive(:observe_value_for_key_path_of_object_changes_context)
-      @observed.set_value_for_key('observed_attribute', 'something else')
+  describe "for has-n relationships" do
+    describe "as the observed object" do
+      it "should have setters and getters based on relationship name" do
+        @observed.should respond_to(:observed_things)
+        @observed.should respond_to(:observed_things=)
+      end
+      
+      it "should return a collection proxy as value of the relationship" do
+        @observed.observed_things.should be_kind_of(CollectionAssociationProxy)
+      end
+      
+      describe "adding an object to the collection" do
+        
+        it "should access notifcations through did/will_change_value interface" do
+          @observed.should_receive(:will_change_value_at_index_for_key).with(KeyValueChangeInsertion, 0, 'observed_things')
+          @observed.should_receive(:did_change_value_at_index_for_key).with(KeyValueChangeInsertion, 0, 'observed_things')
+          
+          @observed.observed_things.insert_object_at_index(Object.new, 0)
+        end
+        
+        it "should notify observers before and after the change" do
+          @observed.should_receive(:send_notifications_for_key_change_options_is_before).exactly(2).times
+          @observed.observed_things.insert_object_at_index(Object.new, 0)
+        end        
+      end
     end
   end
 end
@@ -93,7 +119,7 @@ describe "binding" do
   end
   
   class MockController
-    attr_accessor :mock_model
+    attr_accessor :mock_model, :unimportant_value
   end
   
   before do
@@ -106,12 +132,18 @@ describe "binding" do
     @model      = MockModel.new
     
     @controller.set_value_for_key('mock_model', @model)
-    
-    @text_field.bind_to_object_with_key_path_options('text_value', @controller, 'mock_model.name', nil)
-    @not_updated_text_field.bind_to_object_with_key_path_options('text_value', @controller, 'mock_model.name', nil)
+  end
+  
+  describe "to a value" do    
+    it "should changes from one value object to the other"
   end
   
   describe "to a value at a path" do
+    before do
+      @text_field.bind_to_object_with_key_path_options('text_value', @controller, 'mock_model.name', nil)
+      @not_updated_text_field.bind_to_object_with_key_path_options('text_value', @controller, 'mock_model.name', nil)
+    end
+    
     it "should propogate model changes to a view" do
       @model.set_value_for_key('name', 'new name')
       @text_field.text_value.should eql('new name')

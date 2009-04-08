@@ -166,7 +166,7 @@ class Object
     self.send_notifications_for_key_change_options_is_before(key, change_options, true)
   end
   
-  def will_change_value_at_index_for_key(kvo_change, index, key)
+  def will_change_value_at_index_for_key(kvo_change, index, key)    
     return unless key
     change_options = {KeyValueChangeKindKey => kvo_change, KeyValueChangeIndexesKey => index}
     self.send_notifications_for_key_change_options_is_before(key, change_options, true)
@@ -195,9 +195,9 @@ class Object
     return value
   end 
   
-  # the default KVO callback when changes are made.
+  # the default KVO callback when changes are made. implement in your class
+  # to properly respond to changes
   def observe_value_for_key_path_of_object_changes_context(path, obj, changes, context)
-    
   end
   
   def send_notifications_for_key_change_options_is_before(key, change_options, is_before)

@@ -54,7 +54,65 @@ class TextFieldView
   end
 end
 
+class CollectionAssociationProxy
+  def initialize(key, owner, target = [])
+    @target = target
+    @owner  = owner
+    @key    = key.to_s
+  end
+  
+  def ==(other)
+    @target == other
+  end
+  
+  def value_for_key(key)
+    @target.collect {|object| object.value_for_key(key)}
+  end
+  
+  def objects_at_indexes(indexes)
+    @target.values_at(indexes)
+  end
+  
+  def insert_object_at_index(obj,index)
+    @owner.will_change_value_at_index_for_key(KeyValueChangeInsertion, index, @key)
+    @target.insert(index,obj)
+    @owner.did_change_value_at_index_for_key(KeyValueChangeInsertion, index, @key)
+  end
+  
+  def size
+    @target.size
+  end
+end
+
 class Object
+  def self.has_n(key)
+    define_method(key) do
+      instance_variable_get("@#{key}") || instance_variable_set("@#{key}", CollectionAssociationProxy.new(key, self))
+    end
+    
+    define_method("#{key}=") do |val|
+      instance_variable_set("@#{key}", CollectionAssociationProxy.new(key, self, val))
+    end
+  end
+  
+  # Array access
+  def mutable_array_value_for_key(key)
+    CollectionAssociationProxy.new(key, self)
+  end
+  
+  def mutable_array_value_for_key_path(path)
+    dot_index = path.index('.')
+    
+    unless dot_index
+      return self.mutable_array_value_for_key(path)
+    end
+    
+    first_part = path.slice(0, dot_index)
+    last_part = path.slice(dot_index+1,path.size)
+    
+    self.value_for_key_path(first_part).value_for_key_path(last_part)
+  end
+  
   # Binding
   def bind_to_object_with_key_path_options(attribute, observable_object, key_path, options)
     self.instance_variable_set("@observed_object_for_" + attribute, observable_object)
@@ -166,7 +224,8 @@ class Object
         type = changes[KeyValueChangeKindKey]
         # for to-many relationships, old value is only sensible for replace and remove
         if (type == KeyValueChangeReplacement || type == KeyValueChangeRemoval)
-          old_values = @target_object[key].values_at(*indexes)
+          # old_values = @target_object[key].values_at(*indexes)
+          old_values = @target_object.mutable_array_value_for_key_path(key).objects_at_indexes(indexes)
           changes[KeyValueChangeOldKey] = old_values
         end
       else
@@ -185,7 +244,7 @@ class Object
         type = changes[KeyValueChangeKindKey]
         # for to-many relationships, oldvalue is only sensible for replace and remove
         if (type == KeyValueChangeReplacement || type == KeyValueChangeInsertion)
-          old_values = self.array_for_keypath(key).values_at(*indexes)
+          old_values = self.mutable_array_value_for_key_path(key).objects_at_indexes(*indexes)
           changes[KeyValueChangeNewKey] = old_values
         end
       else
@@ -332,7 +391,8 @@ class ObjectController
 end
 
 class ObjectWithName
-  attr_accessor :name, :listings, :current_model
+  attr_accessor :name, :current_model
+  has_n :listings
   def initialize(name)
     @name = name
   end
@@ -350,75 +410,100 @@ class ObjectWithName
   end
 end
 
-require 'test/unit'
-require 'test/unit/testsuite'
-require 'test/unit/ui/console/testrunner'
+# require 'test/unit'
+# require 'test/unit/testsuite'
+# require 'test/unit/ui/console/testrunner'
+# 
+# class KVOObjectKeyTest < Test::Unit::TestCase
+#   def setup
+#     @o1 = ObjectWithName.new('01')
+#     @o2 = ObjectWithName.new('02')
+#     @o2.add_observer_for_key_path_options_context(@o1, 'name', nil, nil)
+#   end
+#   
+#   def test_one_object_is_observer_of_another
+#     assert @o2.observers_for_key['name'].include?(@o1)
+#   end
+#   
+#   def test_object_update_notifies_observers_for_key
+#     @o2.set_value_for_key('name', 'abcdef')
+#     assert_equal(@o1.value_for_key('name'), @o2.value_for_key('name'))
+#   end
+# end
+# 
+# class KVOHasManyTest < Test::Unit::TestCase
+#   def setup
+#     @o1 = ObjectWithName.new("oh one")
+#   end
+#   
+#   def test_object_has_has_n_methods
+#     assert @o1.respond_to?(:listings)
+#     assert @o1.respond_to?(:'listings=')
+#   end
+#   
+#   def test_correct_return_values_for_has_n_methods
+#     assert_equal @o1.listings, []
+#     
+#     @o1.listings = ['a','b','c']
+#     assert_equal @o1.listings, ['a','b','c']
+#   end
+#   
+#   def test_notifications_sent_for_collection_insertion
+#     @o2 = ObjectWithName.new("oh dos")
+#     
+#     def @o2.observe_value_for_key_path_of_object_changes_context(path,obj,changes,context)
+#       puts changes.inspect
+#     end
+#     @o1.listings = [1,2,3]
+#     
+#     @o1.add_observer_for_key_path_options_context(@o2, 'listings', nil, nil)
+#     @o1.listings.insert_object_at_index(ObjectWithName.new("oh three"), 0)
+#   end
+# end
+# 
+# class ViewBindingTest < Test::Unit::TestCase
+#   def setup
+#     @v = TextFieldView.new
+#     @v.text_value = 'text value 1'
+#     @v2 = TextFieldView.new
+#     @v2.text_value = 'text value 2'
+#     
+#     @controller = ObjectWithName.new('controller')
+#     @model      = ObjectWithName.new('model')
+#     
+#     @controller.set_value_for_key('current_model', @model)
+#     
+#     @v.bind_to_object_with_key_path_options('text_value', @controller, 'current_model.name', nil)
+#     @v2.bind_to_object_with_key_path_options('text_value', @controller, 'current_model.name', nil)
+#   end
+#   
+#   def test_model_observations
+#     assert_equal 2, @model.observers_for_key['name'].size
+#   end
+#   
+#   def test_view_initiated_update
+#     @v.text_value = 'new value typed in'
+#     @v.mouse_up
+#     assert_equal(@v.text_value, @model.name)
+#     assert_equal(@v2.text_value, @model.name)
+#   end
+#   
+#   def test_model_initiated_update
+#     @model.set_value_for_key('name', 'XYZ')
+#     assert_equal(@v.text_value, @model.name)
+#     assert_equal(@v2.text_value, @model.name)
+#     
+#   end
+# end
 
-class KVOObjectKeyTest < Test::Unit::TestCase
-  def setup
-    @o1 = ObjectWithName.new('01')
-    @o2 = ObjectWithName.new('02')
-    @o2.add_observer_for_key_path_options_context(@o1, 'name', nil, nil)
-  end
-  
-  def test_one_object_is_observer_of_another
-    assert @o2.observers_for_key['name'].include?(@o1)
-  end
-  
-  def test_object_update_notifies_observers_for_key
-    @o2.set_value_for_key('name', 'abcdef')
-    assert_equal(@o1.value_for_key('name'), @o2.value_for_key('name'))
-  end
-end
+# class KVOKVCBindingSuite
+#   def self.suite
+#     suite = Test::Unit::TestSuite.new
+#     suite << ViewBindingTest.suite
+#     suite << KVOObjectKeyTest.suite
+#     suite << KVOHasManyTest.suite
+#     return suite
+#   end
+# end
 
-class KVOHasManyTest < Test::Unit::TestCase
-  def test_add_item_to_has_many_collection
-    @o2.add_object_to_listings(ObjectWithName.new('i am in hte collection. You will love me'))
-  end
-end
-
-class ViewBindingTest < Test::Unit::TestCase
-  def setup
-    @v = TextFieldView.new
-    @v.text_value = 'text value 1'
-    @v2 = TextFieldView.new
-    @v2.text_value = 'text value 2'
-    
-    @controller = ObjectWithName.new('controller')
-    @model      = ObjectWithName.new('model')
-    
-    @controller.set_value_for_key('current_model', @model)
-    
-    @v.bind_to_object_with_key_path_options('text_value', @controller, 'current_model.name', nil)
-    @v2.bind_to_object_with_key_path_options('text_value', @controller, 'current_model.name', nil)
-  end
-  
-  def test_model_observations
-    assert_equal 2, @model.observers_for_key['name'].size
-  end
-  
-  def test_view_initiated_update
-    @v.text_value = 'new value typed in'
-    @v.mouse_up
-    assert_equal(@v.text_value, @model.name)
-    assert_equal(@v2.text_value, @model.name)
-  end
-  
-  def test_model_initiated_update
-    @model.set_value_for_key('name', 'XYZ')
-    assert_equal(@v.text_value, @model.name)
-    assert_equal(@v2.text_value, @model.name)
-    
-  end
-end
-
-class KVOKVCBindingSuite
-  def self.suite
-    suite = Test::Unit::TestSuite.new
-    suite << ViewBindingTest.suite
-    suite << KVOObjectKeyTest.suite
-    return suite
-  end
-end
-
-Test::Unit::UI::Console::TestRunner.run(KVOKVCBindingSuite)
+# Test::Unit::UI::Console::TestRunner.run(KVOKVCBindingSuite)

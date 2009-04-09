@@ -84,7 +84,7 @@ class Object
   
   # Array access
   def mutable_array_value_for_key(key)
-    CollectionAssociationProxy.new(key, self)
+    self.value_for_key(key)
   end
   
   def mutable_array_value_for_key_path(path)

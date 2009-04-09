@@ -39,14 +39,19 @@ describe "key value observation" do
   
   class ObservingObject
     def observe_value_for_key_path_of_object_changes_context(path, object, changes, context)
-      @observing_object_was_called = true
+      # puts "object: #{object.inspect}\n"
+      puts "changes: #{changes.inspect}\n"
     end
+    
+    # def observe_value_for_key_path_of_object_changes_context(path, object, changes, context)
+    #   @observing_object_was_called = true
+    # end
   end
   
   before do
     @observer = ObservingObject.new
     @observed = ObservedObject.new
-
+    
     @observed.add_observer_for_key_path_options_context(@observer, 'observed_attribute', nil, nil)
   end
   
@@ -56,12 +61,12 @@ describe "key value observation" do
         @observed.observers_for_key['observed_attribute'].should have(1).items
         @observed.observers_for_key['observed_attribute'].keys.should include(@observer)
       end
-
+      
       it "should not raise errors when observed value is updated" do
         lambda { @observed.set_value_for_key('observed_attribute', 'something else') }.should_not raise_error
       end
     end
-
+    
     describe "from the observing object's point of view" do
       it "should have observe_value_for_key_path_of_object_changes_context called" do
         @observer.should_receive(:observe_value_for_key_path_of_object_changes_context)
@@ -81,8 +86,7 @@ describe "key value observation" do
         @observed.observed_things.should be_kind_of(CollectionAssociationProxy)
       end
       
-      describe "adding an object to the collection" do
-        
+      describe "adding an object to the collection" do        
         it "should access notifcations through did/will_change_value interface" do
           @observed.should_receive(:will_change_value_at_index_for_key).with(KeyValueChangeInsertion, 0, 'observed_things')
           @observed.should_receive(:did_change_value_at_index_for_key).with(KeyValueChangeInsertion, 0, 'observed_things')
@@ -93,7 +97,18 @@ describe "key value observation" do
         it "should notify observers before and after the change" do
           @observed.should_receive(:send_notifications_for_key_change_options_is_before).exactly(2).times
           @observed.observed_things.insert_object_at_index(Object.new, 0)
-        end        
+        end
+      end
+    end
+    
+    describe "as the observing object" do
+      describe "adding an object to the collection" do
+        it "should received a notifiation of the changes" do
+          @object_to_insert = Object.new
+          @observer.should_receive(:observe_value_for_key_path_of_object_changes_context).
+            with('observed_things', @observed, hash_including("KeyValueChangeNewKey"=>[@object_to_insert],"KeyValueChangeIndexesKey"=>0, "KeyValueChangeKindKey"=>2), nil)
+          @observed.observed_things.insert_object_at_index(@object_to_insert, 0)
+        end
       end
     end
   end

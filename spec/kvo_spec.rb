@@ -9,7 +9,7 @@ describe "key value coding" do
     @object = KVCObject.new
   end
   
-  it "should should update instance variables with kvc interface" do
+  it "should update instance variables with kvc interface" do
     lambda { @object.set_value_for_key('some_attr', 'some value') }.should_not raise_error
     @object.instance_variable_get("@some_attr").should eql('some value')
   end
@@ -37,15 +37,10 @@ describe "key value observation" do
     attr_accessor :observed_attribute
   end
   
-  class ObservingObject
+  class ObservingObject    
     def observe_value_for_key_path_of_object_changes_context(path, object, changes, context)
-      # puts "object: #{object.inspect}\n"
-      puts "changes: #{changes.inspect}\n"
+      @observing_object_was_called = true
     end
-    
-    # def observe_value_for_key_path_of_object_changes_context(path, object, changes, context)
-    #   @observing_object_was_called = true
-    # end
   end
   
   before do
@@ -103,11 +98,28 @@ describe "key value observation" do
     
     describe "as the observing object" do
       describe "adding an object to the collection" do
-        it "should received a notifiation of the changes" do
+        it "should receive a notifiation of the changes" do
           @object_to_insert = Object.new
           @observer.should_receive(:observe_value_for_key_path_of_object_changes_context).
             with('observed_things', @observed, {"KeyValueChangeNewKey"=>[@object_to_insert],"KeyValueChangeIndexesKey"=>0, "KeyValueChangeKindKey"=>2}, nil)
           @observed.observed_things.insert_object_at_index(@object_to_insert, 0)
+        end
+      end
+      
+      describe "adding multiple objects to the collection simultaneously" do
+        it "should receive a notifiation of the changes" do
+          @object_1_to_insert = Object.new
+          @object_2_to_insert = Object.new
+          
+          @observer.should_receive(:observe_value_for_key_path_of_object_changes_context).
+           with('observed_things', @observed, {"KeyValueChangeNewKey"=>[@object_1_to_insert, @object_2_to_insert],"KeyValueChangeIndexesKey"=>[1,3], "KeyValueChangeKindKey"=>2}, nil)
+          
+          # add some objects so we can insert at multiple indexes
+          @observed.observed_things.insert_object_at_index(@object_to_insert, 0)
+          @observed.observed_things.insert_object_at_index(@object_to_insert, 0)
+          @observed.observed_things.insert_object_at_index(@object_to_insert, 0)
+          
+          @observed.observed_things.insert_objects_at_indexes([@object_1_to_insert,  @object_2_to_insert], [1,3])
         end
       end
     end
@@ -147,10 +159,6 @@ describe "binding" do
     @model      = MockModel.new
     
     @controller.set_value_for_key('mock_model', @model)
-  end
-  
-  describe "to a value" do    
-    it "should changes from one value object to the other"
   end
   
   describe "to a value at a path" do

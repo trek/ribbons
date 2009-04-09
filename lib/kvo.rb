@@ -60,6 +60,12 @@ class CollectionAssociationProxy
     @target.values_at(indexes)
   end
   
+  def remove_object_at_index(index)
+    @owner.will_change_value_at_index_for_key(KeyValueChangeRemoval, index, @key)
+    @target.delete_at(index)
+    @owner.did_change_value_at_index_for_key(KeyValueChangeRemoval, index, @key)
+  end
+  
   def insert_object_at_index(obj,index)
     @owner.will_change_value_at_index_for_key(KeyValueChangeInsertion, index, @key)
     @target.insert(index,obj)

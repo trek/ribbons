@@ -106,7 +106,7 @@ describe "key value observation" do
         it "should received a notifiation of the changes" do
           @object_to_insert = Object.new
           @observer.should_receive(:observe_value_for_key_path_of_object_changes_context).
-            with('observed_things', @observed, hash_including("KeyValueChangeNewKey"=>[@object_to_insert],"KeyValueChangeIndexesKey"=>0, "KeyValueChangeKindKey"=>2), nil)
+            with('observed_things', @observed, {"KeyValueChangeNewKey"=>[@object_to_insert],"KeyValueChangeIndexesKey"=>0, "KeyValueChangeKindKey"=>2}, nil)
           @observed.observed_things.insert_object_at_index(@object_to_insert, 0)
         end
       end

@@ -60,6 +60,12 @@ class CollectionAssociationProxy
     @target.values_at(indexes)
   end
   
+  def replace_object_at_index(obj, index)
+    @owner.will_change_value_at_index_for_key(KeyValueChangeReplacement, index, @key)
+    @target[index] = obj
+    @owner.did_change_value_at_index_for_key(KeyValueChangeReplacement, index, @key)
+  end
+  
   def remove_object_at_index(index)
     @owner.will_change_value_at_index_for_key(KeyValueChangeRemoval, index, @key)
     @target.delete_at(index)
@@ -116,7 +122,11 @@ class Object
   # KVC
   def set_value_for_key(key,value)
      self.will_change_value_for_key(key)
-     instance_variable_set("@#{key}",value)
+     if self.respond_to?(:"#{key}=")
+       self.send(:"#{key}=", value)
+     else
+       instance_variable_set("@#{key}",value)
+     end
      self.did_change_value_for_key(key)
   end
   
@@ -133,7 +143,11 @@ class Object
   end
   
   def value_for_key(key)
-    instance_variable_get("@#{key}")
+    if self.respond_to?(key.intern)
+      self.send(key.intern)
+    else
+      instance_variable_get("@#{key}")
+    end
   end
   
   def value_for_key_path(key_path)

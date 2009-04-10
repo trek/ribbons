@@ -64,7 +64,7 @@ describe "key value observation" do
     
     describe "from the observing object's point of view" do
       it "should have observe_value_for_key_path_of_object_changes_context called" do
-        @observer.should_receive(:observe_value_for_key_path_of_object_changes_context)
+        @observer.should_receive(:observe_value_for_key_path_of_object_changes_context).exactly(:once)
         @observed.set_value_for_key('observed_attribute', 'something else')
       end
     end
@@ -101,18 +101,21 @@ describe "key value observation" do
         it "should receive a notifiation of the changes" do
           @object_to_insert = Object.new
           @observer.should_receive(:observe_value_for_key_path_of_object_changes_context).
-            with('observed_things', @observed, {"KeyValueChangeNewKey"=>[@object_to_insert],"KeyValueChangeIndexesKey"=>0, "KeyValueChangeKindKey"=>2}, nil)
+            with('observed_things', @observed, {"KeyValueChangeNewKey"=>[@object_to_insert],"KeyValueChangeIndexesKey"=>0, "KeyValueChangeKindKey"=>2}, nil).
+            exactly(:once)
           @observed.observed_things.insert_object_at_index(@object_to_insert, 0)
         end
       end
       
       describe "adding multiple objects to the collection simultaneously" do
         it "should receive a notifiation of the changes" do
+          pending "this spec needs has-n relationships that can add multiple objects at once"
           @object_1_to_insert = Object.new
           @object_2_to_insert = Object.new
           
           @observer.should_receive(:observe_value_for_key_path_of_object_changes_context).
-           with('observed_things', @observed, {"KeyValueChangeNewKey"=>[@object_1_to_insert, @object_2_to_insert],"KeyValueChangeIndexesKey"=>[1,3], "KeyValueChangeKindKey"=>2}, nil)
+           with('observed_things', @observed, {"KeyValueChangeNewKey"=>[@object_1_to_insert, @object_2_to_insert],"KeyValueChangeIndexesKey"=>[1,3], "KeyValueChangeKindKey"=>2}, nil).
+           exactly(:once)
           
           # add some objects so we can insert at multiple indexes
           @observed.observed_things.insert_object_at_index(@object_to_insert, 0)
